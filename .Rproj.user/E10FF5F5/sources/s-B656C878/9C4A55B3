@@ -1,0 +1,25 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1569318445451.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "9C4A55B3",
+    "lastKnownWriteTime" : 1537985871,
+    "last_content_update" : 1537985871,
+    "path" : "~/ai_programming/WheresCroc/man/testWC.Rd",
+    "project_path" : "man/testWC.Rd",
+    "properties" : {
+        "cursorPosition" : "16,35",
+        "scrollLine" : "0"
+    },
+    "read_only" : false,
+    "read_only_alternatives" : [
+    ],
+    "relative_order" : 3,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_doc"
+}
