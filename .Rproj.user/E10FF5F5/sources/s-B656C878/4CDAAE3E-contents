@@ -1,50 +1,52 @@
+#' getTransitionProbability
 #'
 #'
-#'
+getTransitionProbability = function(node, edges) {
+  neighbors = getOptions(node, edges)
+  return (1/length(neighbors))
+}
 
+#'
+#'
+#'
+getEmissionVector = function(readings, probs) {
+  salinity = dnorm(readings[1], probs[["salinity"]][, 1], probs[["salinity"]][, 2], FALSE)
+  phosphate = dnorm(readings[2], probs[["phosphate"]][, 1], probs[["phosphate"]][, 2], FALSE)
+  salinity = dnorm(readings[3], probs[["nitrogen"]][, 1], probs[["nitrogen"]][, 2], FALSE)
+  e = replicate(40, 0)
+  for (i in 1:40) {
+    e[i] = salinity[i] * phosphate[i] * salinity[i]
+  }
+  
+  sum = sum(e)
+  for (i in 1:40) {
+    e[i] = e[i] / sum
+  }
+  
+  return (e)
+}
 
 #' getNodeProbability
 #'
 #'
-getNodeProbability = function(node, observations, prev_f, probs, neighbors) {
+getNodeProbability = function(node, prev_f, edges, emissions) {
   #Compute the probability of Croc reaching the waterhole considering what we know of the previous state
-  moving = 0
-  for (n in length(neighbors[node])) {
-    neighbor = neighbors[[node]][n]
-    moving = moving + (1.0 / length(neighbors[[neighbor]])) * prev_f[neighbor]
+  neighbors = getOptions(node, edges)
+  sum = 0
+  for (n in neighbors) {
+    sum = sum + getTransitionProbability(n, edges) * prev_f[n]
   }
-  # calculate the emission probability
-  e = dnorm(observations[["s"]], probs[["salinity"]][node, 1], probs[["salinity"]][node, 2])
-  e = e * dnorm(observations[["p"]], probs[["phosphate"]][node, 1], probs[["phosphate"]][node, 2])
-  e = e * dnorm(observations[["n"]], probs[["nitrogen"]][node, 1], probs[["nitrogen"]][node, 2])
-  # return new_f = sum(prev_f * T) * e
-  return(e * moving)
+  #  new_f = sum(prev_f * T) * e
+  new_f = sum * emissions[node]
+  return(new_f)
 }
 
-#' getProbabilities
+#' hiddenMarkov
 #'
 #'
-getProbabilities = function(prev_f, probs, observations, neighbors) {
-  tourist1 = observations[["t1"]]
-  tourist2 = observations[["t2"]]
-  if (sum(prev_f) == 0) {
-    counter = 0
-    # loop thorugh all nodes
-    for (node in 1:40) {
-      # check if both tourists are alive 
-      if (!is.na(tourist1) && !is.na(tourist2)) {
-        # if tourist is at waterhole and alive, probability = 0
-        if (tourist1 == node || tourist2 == node) {
-          prev_f[node] = 0
-        } else {
-          prev_f[node] = 1
-          counter = counter + 1
-        }
-      }
-    }
-    # probabilities equal at every possible node
-    prev_f = prev_f / counter
-  }
+hiddenMarkov = function(prev_f, probs, readings, positions, edges) {
+  tourist1 = positions[1]
+  tourist2 = positions[2]
   
   new_f = replicate(40, 0)
   # check if tourist 1 has been eaten this turn
@@ -57,53 +59,124 @@ getProbabilities = function(prev_f, probs, observations, neighbors) {
     crocNode = -1 * tourist2
     new_f[crocNode] = 1
   } else {
-    # compute the probabilities for each waterhole
+    emissions = getEmissionVector(readings, probs)
+    # compute the probabilities for each node
     for (i in 1:length(new_f)) {
-      
-      new_f[i] = getNodeProbability(i, observations, prev_f, probs, neighbors)
+      new_f[i] = getNodeProbability(i, prev_f, edges, emissions)
+    }
+    currentNode = positions[3]
+    # probability in current node is 0
+    new_f[currentNode] = 0
+    # Normalize probabilities
+    sum = sum(new_f)
+    for (i in 1:40) {
+      new_f[i] = new_f[i] / sum
     }
   }
-  # Normalize probabilities
-  new_f = new_f / sum(new_f)
   return (new_f)
+}
+
+#' bfsSearch
+#'
+#'
+bfsSearch = function(node, goal, edges) {
+  visited = c(node)
+  queue = c(node)
+  parents = replicate(40, 0)
+  parents[node] = -1
+  while (length(queue) != 0) {
+    currentNode = head(queue, n=1)
+    queue = setdiff(queue, c(currentNode))
+    neighbors = getOptions(currentNode, edges)
+    neighbors = setdiff(neighbors, c(currentNode))
+    neighbors = setdiff(neighbors, visited)
+    for (node in neighbors) {
+      if (!(node %in% visited)) {
+        queue = c(queue, node)
+        parents[node] = currentNode
+        visited = c(visited, c(node))
+      }
+    }
+  }
+  
+  currentNode = goal
+  path = numeric()
+  while (currentNode != -1) {
+    if (parents[currentNode] != -1) {
+      path = c(c(currentNode), path)
+    }
+    currentNode = parents[currentNode]
+  }
+  
+  return (path)
+}
+
+#' Finit
+#'
+#'
+fInit = function(tourist1, tourist2) {
+  prev_f = replicate(40, 0)
+  counter = 0
+  # loop thorugh all nodes
+  for (node in 1:40) {
+    # check if both tourists are alive 
+    if (!is.na(tourist1) && !is.na(tourist2)) {
+      # if tourist is at waterhole and alive, probability = 0
+      if (tourist1 == node || tourist2 == node) {
+        prev_f[node] = 0
+      } else {
+        prev_f[node] = 1
+        counter = counter + 1
+      }
+    }
+  }
+  # probabilities equal at every possible node
+  prev_f = prev_f / counter
+  return (prev_f)
 }
 
 #' myFunction
 #'
 #'
 myFunction = function(moveInfo,readings,positions,edges,probs) {
-  
-  #neighbors is a list of list containing the neighbors for each waterhole
-  neighbors = list()
-  #Each waterhole is its own neighbor
-  for (i in 1:40) {
-    neighbors[i] = list(i)
+  me = positions[[3]]
+  status = moveInfo[["mem"]][["status"]]
+  # check if new game
+  if (status == 0 || status == 1) {
+    moveInfo[["mem"]][["prev_f"]] = fInit(positions[[1]], positions[[2]])
   }
-  for (edgeNum in 1:nrow(edges)) {
-    firstPoint = edges[edgeNum,1]
-    secondPoint = edges[edgeNum,2]
-    neighbors[[firstPoint]][length(neighbors[[firstPoint]]) + 1] = secondPoint
-    neighbors[[secondPoint]][length(neighbors[[secondPoint]]) + 1] <- firstPoint
+  prev_f = moveInfo[["mem"]][["prev_f"]]
+  new_f = hiddenMarkov(prev_f, probs, readings, positions, edges)
+  goal = which.max(new_f)
+  
+  # if goal is in neighboring node, go there
+  neighbors = getOptions(positions[3], edges)
+  if(goal %in% neighbors){
+    moveInfo$moves = c(goal,0)
+    return (moveInfo)
   }
   
-  observations = list()
-  observations[['s']] = readings[[1]]
-  observations[['p']] = readings[[2]]
-  observations[['n']] = readings[[3]]
-  observations[['t1']] = positions[[1]]
-  observations[['t2']] = positions[[2]]
-  observations[['me']] = positions[[3]]
-  
-  if (length(moveInfo[["mem"]][["prevProbabilities"]]) == 0) {
-    moveInfo[["mem"]][["prevProbabilities"]] = replicate(40,0)
+  # make bfs search for the shortest path to goal node
+  path = bfsSearch(positions[3], goal, edges)
+
+  # two nodes away from goal
+  if(length(path) >= 2) {
+    moveInfo$moves = c(path[1], path[2])
   }
-  prev_f = moveInfo[["mem"]][["prevProbabilities"]]
-  new_f = getProbabilities(prev_f, probs, observations, neighbors)
-  # print('ojo')
-   print(max(new_f))
-   print(hej)
-  #moveInfo[['moves']] = moveResult$move
+  
+  # onde node away from goal
+  if(length(path) == 1){
+    moveInfo$moves = c(path[1], 0)
+  }
+
+  # at goal node, search for croc
+  if(length(path) == 0){
+    moveInfo$moves=c(0,0)  
+  }
+  
   moveInfo[['mem']][["prev_f"]] = new_f
+  moveInfo[["mem"]][["status"]] = 2
+  
   return(moveInfo)
 }
 
@@ -133,8 +206,6 @@ randomWC=function(moveInfo,readings,positions,edges,probs) {
 #' @return See runWheresCroc for details
 #' @export
 manualWC=function(moveInfo,readings,positions,edges,probs) {
-  print('hej')
-  print(edges)
   options=getOptions(positions[3],edges)
   print("Move 1 options (plus 0 for search):")
   print(options)
