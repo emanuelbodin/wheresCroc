@@ -12,10 +12,10 @@ getTransitionProbability = function(node, edges) {
 getEmissionVector = function(readings, probs) {
   salinity = dnorm(readings[1], probs[["salinity"]][, 1], probs[["salinity"]][, 2], FALSE)
   phosphate = dnorm(readings[2], probs[["phosphate"]][, 1], probs[["phosphate"]][, 2], FALSE)
-  salinity = dnorm(readings[3], probs[["nitrogen"]][, 1], probs[["nitrogen"]][, 2], FALSE)
+  nitrogen = dnorm(readings[3], probs[["nitrogen"]][, 1], probs[["nitrogen"]][, 2], FALSE)
   e = replicate(40, 0)
   for (i in 1:40) {
-    e[i] = salinity[i] * phosphate[i] * salinity[i]
+    e[i] = salinity[i] * phosphate[i] * nitrogen[i]
   }
   
   sum = sum(e)
